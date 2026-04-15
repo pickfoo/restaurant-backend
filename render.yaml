@@ -3,8 +3,8 @@ services:
     name: pickfoo-restaurant-backend
     runtime: node
     plan: starter
-    buildCommand: pnpm install --frozen-lockfile && pnpm run build
-    startCommand: pnpm start
+    buildCommand: if [ -d restaurant/backend ]; then cd restaurant/backend; fi; pnpm install --frozen-lockfile && pnpm run build
+    startCommand: if [ -d restaurant/backend ]; then cd restaurant/backend; fi; pnpm start
     healthCheckPath: /health
     autoDeploy: true
     envVars:
