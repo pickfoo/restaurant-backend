@@ -1,0 +1,112 @@
+import { Request, Response, NextFunction } from 'express';
+import Category from './category.model.js';
+import MenuItem from './menuItem.model.js';
+
+// @desc    Create category
+// @route   POST /api/v1/menu/categories
+// @access  Private/Owner
+export const createCategory = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    req.body.owner = req.user!._id;
+
+    const category = await Category.create(req.body);
+
+    res.status(201).json({
+      success: true,
+      data: category,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all categories (shared across owners)
+// @route   GET /api/v1/menu/categories
+// @access  Private/Owner
+export const getMyCategories = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Return all categories, regardless of owner, so every restaurant owner
+    // can see/use the same category list.
+    const categories = await Category.find().sort({ name: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: categories.length,
+      data: categories,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update category
+// @route   PUT /api/v1/menu/categories/:id
+// @access  Private/Owner
+export const updateCategory = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let category = await Category.findById(req.params.id);
+
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'Category not found' });
+    }
+
+    if (category.owner.toString() !== req.user!._id.toString()) {
+      return res.status(401).json({ success: false, message: 'Not authorized' });
+    }
+
+    category = await Category.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: category,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete category (rejected if any menu item uses this category)
+// @route   DELETE /api/v1/menu/categories/:id
+// @access  Private/Owner
+export const deleteCategory = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const category = await Category.findById(req.params.id);
+
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'Category not found' });
+    }
+
+    if (category.owner.toString() !== req.user!._id.toString()) {
+      return res.status(401).json({ success: false, message: 'Not authorized' });
+    }
+
+    // Menu items store category as string (name or id); block delete if in use by any owner
+    const categoryIdStr = category._id.toString();
+    const categoryName = category.name;
+    const inUse = await MenuItem.exists({
+      $or: [
+        { category: categoryIdStr },
+        { category: categoryName },
+      ],
+    });
+
+    if (inUse) {
+      return res.status(400).json({
+        success: false,
+        message: 'Category is already in use by menu items. Remove or change category from those items first.',
+      });
+    }
+
+    await category.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      data: {},
+    });
+  } catch (error) {
+    next(error);
+  }
+};
