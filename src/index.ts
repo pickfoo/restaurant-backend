@@ -42,6 +42,7 @@ io.on('connection', (socket) => {
 });
 
 const port = process.env.PORT || 5000;
+const publicApiUrl = process.env.PUBLIC_API_URL || 'https://api.restaurant.pickfoo.in';
 
 // Swagger definition
 const swaggerOptions = {
@@ -58,7 +59,7 @@ const swaggerOptions = {
         description: 'Local server',
       },
       {
-        url: 'https://api.restaurant.pickfoo.in',
+        url: publicApiUrl,
         description: 'Production server',
       },
     ],
