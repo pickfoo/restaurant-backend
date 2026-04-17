@@ -13,6 +13,13 @@ import connectDB from './config/db.js';
 
 dotenv.config();
 
+/** When set (e.g. `/restaurant`), all HTTP routes and Socket.IO live under this prefix (unified api.pickfoo.in). */
+const API_BASE_PATH = (process.env.API_BASE_PATH ?? '').replace(/\/$/, '');
+function route(urlPath: string): string {
+  const p = urlPath.startsWith('/') ? urlPath : `/${urlPath}`;
+  return `${API_BASE_PATH}${p}`;
+}
+
 // Connect to Database
 connectDB();
 
@@ -20,10 +27,28 @@ import { initCronJobs } from './tasks/restaurantSchedule.js';
 initCronJobs();
 
 const app: Express = express();
+if (API_BASE_PATH || process.env.TRUST_PROXY === '1') {
+  app.set('trust proxy', 1);
+}
+
+const restaurantWebOrigins = [
+  process.env.CLIENT_URL || 'http://localhost:3003',
+  'https://restaurant.pickfoo.in',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3003',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:3002',
+  'http://127.0.0.1:3003',
+];
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  path: route('/socket.io'),
   cors: {
-    origin: [process.env.CLIENT_URL || 'http://localhost:3000', 'https://restaurant.pickfoo.in', 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
+    origin: restaurantWebOrigins,
     credentials: true,
   }
 });
@@ -42,7 +67,7 @@ io.on('connection', (socket) => {
 });
 
 const port = process.env.PORT || 5000;
-const publicApiUrl = process.env.PUBLIC_API_URL || 'https://api.restaurant.pickfoo.in';
+const publicApiUrl = process.env.PUBLIC_API_URL || 'https://api.pickfoo.in/restaurant';
 
 // Swagger definition
 const swaggerOptions = {
@@ -93,14 +118,14 @@ const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: [process.env.CLIENT_URL || 'http://localhost:3000', 'https://restaurant.pickfoo.in', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://localhost:3002'], credentials: true }));
+app.use(cors({ origin: restaurantWebOrigins, credentials: true }));
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Swagger Route
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+app.use(route('/api-docs'), swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 // Mount Routes
 import authRoutes from './modules/auth/auth.routes.js';
@@ -116,20 +141,20 @@ import withdrawalRoutes from './modules/withdrawal/withdrawal.routes.js';
 import notificationRoutes from './modules/notification/notification.routes.js';
 import Notification from './modules/notification/notification.model.js';
 
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/restaurants', restaurantRoutes);
-app.use('/api/v1/menu', menuRoutes);
-app.use('/api/v1/orders', orderRoutes);
-app.use('/api/v1/reviews', reviewRoutes);
-app.use('/api/v1/transactions', transactionRoutes);
-app.use('/api/v1/upload', uploadRoutes);
-app.use('/api/v1/dashboard', dashboardRoutes);
-app.use('/api/v1/bank-accounts', bankAccountRoutes);
-app.use('/api/v1/withdrawals', withdrawalRoutes);
-app.use('/api/v1/notifications', notificationRoutes);
+app.use(route('/api/v1/auth'), authRoutes);
+app.use(route('/api/v1/restaurants'), restaurantRoutes);
+app.use(route('/api/v1/menu'), menuRoutes);
+app.use(route('/api/v1/orders'), orderRoutes);
+app.use(route('/api/v1/reviews'), reviewRoutes);
+app.use(route('/api/v1/transactions'), transactionRoutes);
+app.use(route('/api/v1/upload'), uploadRoutes);
+app.use(route('/api/v1/dashboard'), dashboardRoutes);
+app.use(route('/api/v1/bank-accounts'), bankAccountRoutes);
+app.use(route('/api/v1/withdrawals'), withdrawalRoutes);
+app.use(route('/api/v1/notifications'), notificationRoutes);
 
 // Notification route from Admin Backend
-app.post('/api/v1/notify/status-update', async (req, res) => {
+app.post(route('/api/v1/notify/status-update'), async (req, res) => {
   const { restaurantName, status, ownerId, restaurantId } = req.body as {
     restaurantName?: string;
     status?: string;
@@ -181,7 +206,7 @@ app.post('/api/v1/notify/status-update', async (req, res) => {
 });
 
 // Health Check
-app.get('/health', (req: Request, res: Response) => {
+app.get(route('/health'), (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', uptime: process.uptime() });
 });
 
@@ -196,7 +221,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 httpServer.listen(port, () => {
   console.log(`[server]: Server is running at http://localhost:${port}`);
-  console.log(`[server]: Swagger docs available at http://localhost:${port}/api-docs`);
+  console.log(`[server]: Swagger docs at http://localhost:${port}${route('/api-docs')}`);
 });
 
 export default app;
